@@ -1,0 +1,21 @@
+{
+  "name": "claude-code-metrics",
+  "version": "0.1.0",
+  "description": "Measure your own Claude Code usage from local transcripts: prompt-cache savings and how often agent edits type-check on the first try.",
+  "type": "module",
+  "bin": { "claude-code-metrics": "dist/cli.js" },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "metrics": "tsx src/cli.ts"
+  },
+  "engines": { "node": ">=20" },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3"
+  }
+}
