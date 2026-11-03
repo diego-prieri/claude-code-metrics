@@ -28,6 +28,21 @@ export const CHECKS: Check[] = [
 const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 /** Output trimmed by a pipe may hide the failure line; these runs are reported apart. */
 const FILTERED = /\|\s*(head|tail|grep|rg|awk|sed|cut|wc)\b/;
+/** Bash commands that edit files in place; their file arguments count as edits. */
+const IN_PLACE = /\b(sed\s+(-\S*\s+)*-i|perl\s+(-\S*\s+)*-\S*i|tee)\b/;
+/** Output redirected into a file (`>` or `>>`, not `2>` or `>&`). */
+const REDIRECT = /(?<![\d&>])>>?\s*(?!&)([^\s;&|<>]+)/g;
+
+/**
+ * Files a Bash command writes: redirection targets, plus every argument of an
+ * in-place editor (`sed -i`, `perl -i`, `tee`). Over-inclusive on purpose:
+ * callers only keep paths that match a check's triggers.
+ */
+export function bashWrittenPaths(command: string): string[] {
+  const paths = [...command.matchAll(REDIRECT)].map((m) => m[1]);
+  if (IN_PLACE.test(command)) paths.push(...command.split(/\s+/).map((t) => t.replace(/^['"]|['";]+$/g, '')));
+  return paths;
+}
 
 export interface Attempt {
   check: string;
@@ -87,6 +102,8 @@ export function firstTryAttempts(sessions: TranscriptEntry[][], filter: Filter =
             for (const c of checks) if (c.triggers.test(path)) armed.add(c.name);
           } else if (block.name === 'Bash' && block.input?.command) {
             const cmd = block.input.command;
+            // Edits made from the shell arm checks too, before this command's own check runs.
+            for (const written of bashWrittenPaths(cmd)) for (const c of checks) if (c.triggers.test(written)) armed.add(c.name);
             const check = checks.find((c) => c.command.test(cmd));
             if (check && armed.has(check.name)) {
               armed.delete(check.name);

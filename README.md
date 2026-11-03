@@ -55,7 +55,7 @@ On a subscription plan you are not billed per token. There the number means "wha
 
 Each session is replayed in order:
 
-- An edit (`Write`, `Edit`, `MultiEdit`) to a matching file **arms** a check: `.ts/.tsx/.vue` for typecheck, code files for tests.
+- An edit to a matching file **arms** a check: `.ts/.tsx/.vue` for typecheck, code files for tests. Edits count whether they come from `Write`, `Edit` or `MultiEdit`, or from Bash: redirection into a file (`cat > a.ts`, `>>`) and in-place editors (`sed -i`, `perl -i`, `tee`).
 - The next Bash command that runs that check (`tsc`, `vue-tsc`, `jest`, `vitest`, `npm test`, `node --test`, …) is the **first try**. Its output decides pass or fail (`error TS…`, `N failed`, `not ok`, …).
 - Reruns before the next edit are ignored: they measure iteration, not the first attempt.
 

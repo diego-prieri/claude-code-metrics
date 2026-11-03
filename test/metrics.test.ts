@@ -76,6 +76,28 @@ test('edits to non-code files do not arm the typecheck', () => {
   assert.equal(firstTryAttempts([session]).length, 0);
 });
 
+test('edits made from Bash arm checks', () => {
+  const session = [
+    toolUse('s1', 'Bash', { command: "sed -i '' 's/foo/bar/' src/a.ts" }),
+    toolUse('t1', 'Bash', { command: 'npx tsc --noEmit' }),
+    toolResult('t1', ''),
+    toolUse('h1', 'Bash', { command: "cat > src/b.tsx <<'EOF'\nexport {}\nEOF" }),
+    toolUse('t2', 'Bash', { command: 'npx tsc --noEmit' }),
+    toolResult('t2', 'error TS2322: nope'),
+  ];
+  const attempts = firstTryAttempts([session]).filter((a) => a.check === 'typecheck');
+  assert.deepEqual(attempts.map((a) => a.passed), [true, false]);
+});
+
+test('reads and logs from Bash do not arm checks', () => {
+  const session = [
+    toolUse('r1', 'Bash', { command: 'cat src/a.ts && grep -n foo src/b.ts 2> err.ts' }),
+    toolUse('r2', 'Bash', { command: 'npx tsc --noEmit > tsc.log 2>&1' }),
+    toolResult('r2', ''),
+  ];
+  assert.equal(firstTryAttempts([session]).length, 0);
+});
+
 test('detects failing test runs and flags filtered output', () => {
   const session = [
     toolUse('e1', 'Edit', { file_path: 'src/a.ts' }),
