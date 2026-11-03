@@ -27,6 +27,8 @@ Period: 2026-09-09 → 2026-10-23 · 23,387 responses
 
 That is six weeks of real use on a ~120k-line TypeScript app: about 5.7B input tokens.
 
+Write-up with the results after eight weeks, the formulas and the caveats: [I measured 8 weeks of Claude Code](https://dev.to/diegoprieri/i-measured-8-weeks-of-claude-code-87-lower-cost-86-first-try-typecheck-gp2).
+
 ## Usage
 
 ```bash
