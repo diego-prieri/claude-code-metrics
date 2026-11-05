@@ -98,6 +98,21 @@ test('reads and logs from Bash do not arm checks', () => {
   assert.equal(firstTryAttempts([session]).length, 0);
 });
 
+test('records where arming edits came from and can drop untracked files', () => {
+  const session = [
+    toolUse('e1', 'Edit', { file_path: 'src/a.ts' }),
+    toolUse('s1', 'Bash', { command: 'cat > scratch.ts <<EOF\nEOF' }),
+    toolUse('t1', 'Bash', { command: 'tsc' }),
+    toolResult('t1', ''),
+    toolUse('s2', 'Bash', { command: 'cat > scratch.ts <<EOF\nEOF' }),
+    toolUse('t2', 'Bash', { command: 'tsc' }),
+    toolResult('t2', ''),
+  ];
+  const typecheck = (opts = {}) => firstTryAttempts([session], {}, undefined, opts).filter((a) => a.check === 'typecheck').map((a) => a.armedBy);
+  assert.deepEqual(typecheck(), ['both', 'bash']);
+  assert.deepEqual(typecheck({ isTracked: (p: string) => p.startsWith('src/') }), ['tool']);
+});
+
 test('detects failing test runs and flags filtered output', () => {
   const session = [
     toolUse('e1', 'Edit', { file_path: 'src/a.ts' }),
@@ -111,9 +126,9 @@ test('detects failing test runs and flags filtered output', () => {
 
 test('summarize reports overall, unfiltered and monthly rates', () => {
   const s = summarize([
-    { check: 'typecheck', timestamp: '2026-09-01', passed: true, filtered: false },
-    { check: 'typecheck', timestamp: '2026-10-01', passed: false, filtered: false },
-    { check: 'typecheck', timestamp: '2026-10-02', passed: true, filtered: true },
+    { check: 'typecheck', timestamp: '2026-09-01', passed: true, filtered: false, armedBy: 'tool' },
+    { check: 'typecheck', timestamp: '2026-10-01', passed: false, filtered: false, armedBy: 'bash' },
+    { check: 'typecheck', timestamp: '2026-10-02', passed: true, filtered: true, armedBy: 'tool' },
   ]);
   assert.equal(s.rate, 2 / 3);
   assert.equal(s.unfilteredRate, 0.5);

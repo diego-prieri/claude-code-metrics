@@ -43,6 +43,13 @@ export function renderMarkdown(cache: CacheReport, firstTry: Record<string, Firs
       Object.entries(firstTry).map(([name, s]) => [name, String(s.attempts), String(s.passed), pct(s.rate), `${pct(s.unfilteredRate)} (n=${s.unfilteredAttempts})`]),
     ),
     '',
+    'By where the edits came from: edit tools, Bash, or both before the same run.',
+    '',
+    ...table(
+      ['Check', 'Edited by', 'Attempts', 'Rate'],
+      Object.entries(firstTry).flatMap(([name, s]) => Object.entries(s.bySource).sort().map(([src, r]) => [name, src, String(r.attempts), pct(r.rate)])),
+    ),
+    '',
     '> Savings assume API list prices (cache write 1.25x/2x, read 0.1x of input). On a subscription plan',
     '> they are what the same tokens would cost on the API, not money you were billed.',
   ];

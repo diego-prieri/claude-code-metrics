@@ -36,6 +36,7 @@ npm install
 npx tsx src/cli.ts                                   # everything
 npx tsx src/cli.ts --since 2026-10-01                # a period
 npx tsx src/cli.ts --project my-app                  # sessions whose cwd contains "my-app"
+npx tsx src/cli.ts --tracked-only                    # only edits to files git tracks today
 npx tsx src/cli.ts --json > metrics.json             # raw numbers
 ```
 
@@ -64,6 +65,7 @@ Each session is replayed in order:
 - **Filtered output.** A command piped through `head`, `grep` or `tail` may hide the failing line. Those runs are counted, and also reported separately: the "unfiltered only" column is the conservative number. It often has a small n, because agents pipe long outputs.
 - **Pre-existing failures.** A repo that already fails its typecheck makes every attempt look like a failure. Measure on a clean baseline or treat the number as a lower bound.
 - **Not an eval.** This observes real work, so tasks are not controlled. For an A/B comparison of prompts or context, use a harness that runs the same tasks under each variant.
+- **Tracked files are checked today.** `--tracked-only` asks git about the repo as it is now, so files deleted since, and sessions in worktrees that no longer exist, drop out.
 - Transcripts are cleaned up over time, so the period covered is whatever is still on disk.
 
 ## Development

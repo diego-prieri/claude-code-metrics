@@ -50,6 +50,13 @@ export interface Attempt {
   passed: boolean;
   /** The command piped its output through a filter, so a failure could be hidden. */
   filtered: boolean;
+  /** Where the edits that armed this check came from. */
+  armedBy: 'tool' | 'bash' | 'both';
+}
+
+export interface FirstTryOptions {
+  /** Keeps only edits to files this returns true for, e.g. files tracked by git. */
+  isTracked?: (path: string, cwd: string) => boolean;
 }
 
 export interface FirstTryStats {
@@ -60,6 +67,8 @@ export interface FirstTryStats {
   unfilteredAttempts: number;
   unfilteredRate: number;
   byMonth: Record<string, { attempts: number; passed: number; rate: number }>;
+  /** Same rates split by where the arming edits came from. */
+  bySource: Record<string, { attempts: number; passed: number; rate: number }>;
 }
 
 interface ToolUse {
@@ -87,33 +96,40 @@ function resultText(content: unknown): string {
  * reruns (after fixes) are not counted, since they measure iteration, not the
  * first attempt.
  */
-export function firstTryAttempts(sessions: TranscriptEntry[][], filter: Filter = {}, checks = CHECKS): Attempt[] {
+export function firstTryAttempts(sessions: TranscriptEntry[][], filter: Filter = {}, checks = CHECKS, options: FirstTryOptions = {}): Attempt[] {
   const attempts: Attempt[] = [];
   for (const entries of sessions) {
-    const armed = new Set<string>();
-    const pending = new Map<string, { check: Check; timestamp: string; filtered: boolean }>();
+    /** Check name → sources of the edits that armed it. */
+    const armed = new Map<string, Set<'tool' | 'bash'>>();
+    const pending = new Map<string, Omit<Attempt, 'check' | 'passed'> & { check: Check }>();
     for (const e of entries) {
+      const arm = (path: string, source: 'tool' | 'bash') => {
+        if (options.isTracked && !options.isTracked(path, e.cwd ?? '')) return;
+        for (const c of checks) if (c.triggers.test(path)) (armed.get(c.name) ?? armed.set(c.name, new Set()).get(c.name)!).add(source);
+      };
       const content = e.message?.content;
       if (!Array.isArray(content)) continue;
       for (const block of content as Array<ToolUse | ToolResult>) {
         if (block?.type === 'tool_use') {
           const path = block.input?.file_path ?? block.input?.notebook_path ?? '';
           if (EDIT_TOOLS.has(block.name)) {
-            for (const c of checks) if (c.triggers.test(path)) armed.add(c.name);
+            arm(path, 'tool');
           } else if (block.name === 'Bash' && block.input?.command) {
             const cmd = block.input.command;
             // Edits made from the shell arm checks too, before this command's own check runs.
-            for (const written of bashWrittenPaths(cmd)) for (const c of checks) if (c.triggers.test(written)) armed.add(c.name);
+            for (const written of bashWrittenPaths(cmd)) arm(written, 'bash');
             const check = checks.find((c) => c.command.test(cmd));
-            if (check && armed.has(check.name)) {
+            const sources = check && armed.get(check.name);
+            if (check && sources) {
               armed.delete(check.name);
-              if (matches(e, filter)) pending.set(block.id, { check, timestamp: e.timestamp ?? '', filtered: FILTERED.test(cmd) });
+              const armedBy = sources.size > 1 ? 'both' : [...sources][0];
+              if (matches(e, filter)) pending.set(block.id, { check, timestamp: e.timestamp ?? '', filtered: FILTERED.test(cmd), armedBy });
             }
           }
         } else if (block?.type === 'tool_result' && pending.has(block.tool_use_id)) {
           const p = pending.get(block.tool_use_id)!;
           pending.delete(block.tool_use_id);
-          attempts.push({ check: p.check.name, timestamp: p.timestamp, filtered: p.filtered, passed: !p.check.failure.test(resultText(block.content)) });
+          attempts.push({ ...p, check: p.check.name, passed: !p.check.failure.test(resultText(block.content)) });
         }
       }
     }
@@ -125,12 +141,14 @@ export function summarize(attempts: Attempt[]): FirstTryStats {
   const passed = attempts.filter((a) => a.passed).length;
   const unfiltered = attempts.filter((a) => !a.filtered);
   const byMonth: FirstTryStats['byMonth'] = {};
+  const bySource: FirstTryStats['bySource'] = {};
   for (const a of attempts) {
-    const m = (byMonth[a.timestamp.slice(0, 7) || 'unknown'] ??= { attempts: 0, passed: 0, rate: 0 });
-    m.attempts += 1;
-    if (a.passed) m.passed += 1;
+    for (const m of [(byMonth[a.timestamp.slice(0, 7) || 'unknown'] ??= { attempts: 0, passed: 0, rate: 0 }), (bySource[a.armedBy] ??= { attempts: 0, passed: 0, rate: 0 })]) {
+      m.attempts += 1;
+      if (a.passed) m.passed += 1;
+    }
   }
-  for (const m of Object.values(byMonth)) m.rate = m.passed / m.attempts;
+  for (const m of [...Object.values(byMonth), ...Object.values(bySource)]) m.rate = m.passed / m.attempts;
   return {
     attempts: attempts.length,
     passed,
@@ -138,5 +156,6 @@ export function summarize(attempts: Attempt[]): FirstTryStats {
     unfilteredAttempts: unfiltered.length,
     unfilteredRate: unfiltered.length ? unfiltered.filter((a) => a.passed).length / unfiltered.length : 0,
     byMonth,
+    bySource,
   };
 }
